@@ -215,7 +215,11 @@ export const server = Bun.serve({
       })
     },
   },
-  fetch: (req) => serveStatic(new URL(req.url).pathname),
+  fetch: (req) => {
+    const { pathname } = new URL(req.url)
+    // /i/ is public; never fall through to the SPA there.
+    return pathname.startsWith("/i/") ? notFound() : serveStatic(pathname)
+  },
 })
 
 console.log(`ipa-host on :${server.port}, data ${DATA_DIR}, public ${PUBLIC_URL}`)
