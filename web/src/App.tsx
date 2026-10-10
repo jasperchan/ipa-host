@@ -44,8 +44,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Toaster } from "@/components/ui/sonner"
 
+type Platform = "ios" | "android"
+
 type Build = {
   id: string
+  platform: Platform
   name: string
   bundleId: string
   version: string
@@ -56,21 +59,43 @@ type Build = {
   hasIcon: boolean
 }
 
-type AppGroup = { bundleId: string; name: string; builds: Build[] }
+type AppGroup = {
+  platform: Platform
+  bundleId: string
+  name: string
+  builds: Build[]
+}
 
 const isIOS =
   /iPhone|iPad|iPod/.test(navigator.userAgent) ||
   (navigator.userAgent.includes("Macintosh") && navigator.maxTouchPoints > 1)
+const isAndroid = /Android/.test(navigator.userAgent)
+
+const PLATFORMS: { id: Platform; label: string }[] = [
+  { id: "ios", label: "iOS" },
+  { id: "android", label: "Android" },
+]
+const platformLabel = (p: Platform) => PLATFORMS.find((x) => x.id === p)!.label
+
+// Whether this device can install the build straight from the listing; other
+// devices get the QR code to the public install page instead.
+const canInstallHere = (b: Build) =>
+  b.platform === "android" ? isAndroid : isIOS
 
 const shareUrl = (b: Build) => `${location.origin}/i/${b.id}`
 const installUrl = (b: Build) =>
-  `itms-services://?action=download-manifest&url=${encodeURIComponent(
-    `${location.origin}/i/${b.id}/manifest.plist`
-  )}`
+  b.platform === "android"
+    ? `/i/${b.id}/app.apk`
+    : `itms-services://?action=download-manifest&url=${encodeURIComponent(
+        `${location.origin}/i/${b.id}/manifest.plist`
+      )}`
 
 const mb = (n: number) => `${(n / 1e6).toFixed(0)} MB`
 const when = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+  new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
 const label = (b: Build) => `${b.version}${b.build ? ` (${b.build})` : ""}`
 
 function AppIcon({ build, size }: { build: Build; size: "lg" | "sm" }) {
@@ -98,8 +123,20 @@ type Actions = {
   onDelete: (b: Build) => void
 }
 
-function InstallButton({ build, onQr, size }: { build: Build; onQr: (b: Build) => void; size?: "sm" }) {
-  if (isIOS) {
+function PlatformBadge({ platform }: { platform: Platform }) {
+  return <Badge variant="outline">{platformLabel(platform)}</Badge>
+}
+
+function InstallButton({
+  build,
+  onQr,
+  size,
+}: {
+  build: Build
+  onQr: (b: Build) => void
+  size?: "sm"
+}) {
+  if (canInstallHere(build)) {
     return (
       <Button size={size} render={<a href={installUrl(build)} />}>
         <DownloadIcon />
@@ -158,9 +195,12 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-base font-medium">{latest.name}</h2>
+              <PlatformBadge platform={latest.platform} />
               <Badge variant="secondary">{label(latest)}</Badge>
             </div>
-            <p className="truncate text-xs text-muted-foreground">{app.bundleId}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {app.bundleId}
+            </p>
             <p className="text-xs text-muted-foreground">
               {when(latest.uploadedAt)} · {mb(latest.size)}
             </p>
@@ -190,7 +230,10 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
                 {older.map((b) => (
                   <li key={b.id} className="flex items-center gap-3 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{label(b)}</p>
+                      <p className="flex items-center gap-2 text-sm font-medium">
+                        {label(b)}
+                        <PlatformBadge platform={b.platform} />
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {when(b.uploadedAt)} · {mb(b.size)}
                         {b.notes ? ` · ${b.notes}` : ""}
@@ -241,6 +284,8 @@ export function App() {
     return () => window.removeEventListener("focus", onFocus)
   }, [load])
 
+  const mixed = new Set(apps?.map((a) => a.platform)).size > 1
+
   const confirmDelete = async () => {
     if (!deleting) return
     const res = await fetch(`/api/builds/${deleting.id}`, { method: "DELETE" })
@@ -253,13 +298,36 @@ export function App() {
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 px-4 py-8 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      {error && <p className="text-sm text-destructive">Couldn't load builds: {error}</p>}
+      {error && (
+        <p className="text-sm text-destructive">
+          Couldn't load builds: {error}
+        </p>
+      )}
       {apps?.length === 0 && (
         <p className="text-sm text-muted-foreground">No builds yet.</p>
       )}
-      {apps?.map((app) => (
-        <AppCard key={app.bundleId} app={app} onQr={setQr} onDelete={setDeleting} />
-      ))}
+      {apps &&
+        PLATFORMS.map(({ id, label: name }) => {
+          const list = apps.filter((a) => a.platform === id)
+          if (list.length === 0) return null
+          return (
+            <section key={id} className="flex flex-col gap-4">
+              {mixed && (
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {name}
+                </h2>
+              )}
+              {list.map((app) => (
+                <AppCard
+                  key={`${app.platform}:${app.bundleId}`}
+                  app={app}
+                  onQr={setQr}
+                  onDelete={setDeleting}
+                />
+              ))}
+            </section>
+          )
+        })}
 
       <Dialog open={qr !== null} onOpenChange={(open) => !open && setQr(null)}>
         <DialogContent className="sm:max-w-sm">
@@ -269,7 +337,11 @@ export function App() {
                 <DialogTitle>
                   {qr.name} {label(qr)}
                 </DialogTitle>
-                <DialogDescription>Scan with the iPhone's camera to install.</DialogDescription>
+                <DialogDescription>
+                  {qr.platform === "android"
+                    ? "Scan with the phone's camera, then allow the browser to install unknown apps if asked."
+                    : "Scan with the iPhone's camera to install."}
+                </DialogDescription>
               </DialogHeader>
               <div className="flex justify-center rounded-lg bg-white p-4">
                 <QRCodeSVG value={shareUrl(qr)} size={208} />
@@ -279,14 +351,18 @@ export function App() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               Delete {deleting?.name} {deleting && label(deleting)}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The IPA is removed from the server and its install link stops working.
+              The {deleting?.platform === "android" ? "APK" : "IPA"} is removed
+              from the server and its install link stops working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

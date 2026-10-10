@@ -1,16 +1,19 @@
-// ipa-host: lists ad hoc iOS builds and serves what iOS needs to install them.
+// ipa-host: lists ad hoc iOS and Android builds and serves what the devices
+// need to install them.
 //
 // Builds are plain directories under DATA_DIR, written directly by the
 // publisher (no upload API):
 //
-//   <DATA_DIR>/<id>/app.ipa
-//   <DATA_DIR>/<id>/manifest.json   {name, bundleId, version, build, notes?, uploadedAt?}
+//   <DATA_DIR>/<id>/app.ipa | app.apk
+//   <DATA_DIR>/<id>/manifest.json   {platform?, name, bundleId, version, build?, notes?, uploadedAt?}
 //   <DATA_DIR>/<id>/icon.png        optional
 //
-// Publishers write to a dot-prefixed temp dir and rename it into place, so a
-// half-written build is never listed. <id> must be long and random: everything
-// under /i/<id>/ is public (iOS fetches the manifest and IPA without cookies),
-// while the listing and API sit behind Cloudflare Access.
+// platform is "ios" (default when absent) or "android"; bundleId holds the
+// Android package name for APKs. Publishers write to a dot-prefixed temp dir
+// and rename it into place, so a half-written build is never listed. <id> must
+// be long and random: everything under /i/<id>/ is public (devices fetch the
+// manifest and package without cookies), while the listing and API sit behind
+// Cloudflare Access.
 
 import { readdir, rm, stat } from "node:fs/promises"
 import { join, resolve } from "node:path"
@@ -23,7 +26,10 @@ const PORT = Number(process.env.PORT ?? 8080)
 
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/
 
+export type Platform = "ios" | "android"
+
 type Manifest = {
+  platform?: Platform
   name: string
   bundleId: string
   version: string
@@ -32,12 +38,15 @@ type Manifest = {
   uploadedAt?: string
 }
 
-export type Build = Manifest & {
+export type Build = Omit<Manifest, "platform"> & {
   id: string
+  platform: Platform
   size: number
   uploadedAt: string
   hasIcon: boolean
 }
+
+const packageFile = (platform: Platform) => (platform === "android" ? "app.apk" : "app.ipa")
 
 async function readBuild(id: string): Promise<Build | null> {
   if (!ID_RE.test(id)) return null
@@ -45,13 +54,16 @@ async function readBuild(id: string): Promise<Build | null> {
   try {
     const manifest = (await Bun.file(join(dir, "manifest.json")).json()) as Manifest
     if (!manifest.bundleId || !manifest.name || !manifest.version) return null
-    const ipa = await stat(join(dir, "app.ipa"))
+    const platform: Platform = manifest.platform === "android" ? "android" : "ios"
+    // Missing package file throws → the directory is skipped.
+    const pkg = await stat(join(dir, packageFile(platform)))
     const hasIcon = await Bun.file(join(dir, "icon.png")).exists()
     return {
       ...manifest,
       id,
-      size: ipa.size,
-      uploadedAt: manifest.uploadedAt ?? ipa.mtime.toISOString(),
+      platform,
+      size: pkg.size,
+      uploadedAt: manifest.uploadedAt ?? pkg.mtime.toISOString(),
       hasIcon,
     }
   } catch {
@@ -72,14 +84,22 @@ async function listBuilds(): Promise<Build[]> {
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
 }
 
+// Groups by platform + bundle id: the same app usually shares an identifier
+// across iOS and Android, and those are different installables.
 function groupApps(builds: Build[]) {
   const apps = new Map<string, Build[]>()
   for (const b of builds) {
-    const list = apps.get(b.bundleId) ?? []
+    const key = `${b.platform}:${b.bundleId}`
+    const list = apps.get(key) ?? []
     list.push(b)
-    apps.set(b.bundleId, list)
+    apps.set(key, list)
   }
-  return [...apps.entries()].map(([bundleId, builds]) => ({ bundleId, name: builds[0].name, builds }))
+  return [...apps.values()].map((builds) => ({
+    platform: builds[0].platform,
+    bundleId: builds[0].bundleId,
+    name: builds[0].name,
+    builds,
+  }))
 }
 
 const xml = (s: string) =>
@@ -117,16 +137,26 @@ function manifestPlist(b: Build) {
 `
 }
 
-export const installUrl = (id: string) =>
-  `itms-services://?action=download-manifest&url=${encodeURIComponent(`${PUBLIC_URL}/i/${id}/manifest.plist`)}`
+export const installUrl = (b: Build) =>
+  b.platform === "android"
+    ? `/i/${b.id}/app.apk`
+    : `itms-services://?action=download-manifest&url=${encodeURIComponent(`${PUBLIC_URL}/i/${b.id}/manifest.plist`)}`
 
 const mb = (n: number) => `${(n / 1e6).toFixed(0)} MB`
+
+// Header-safe filename: name and version both come from manifest.json.
+const safe = (s: string) => s.replace(/[^\w.-]+/g, "_")
+const attachmentName = (b: Build, ext: string) => `${safe(b.name)}-${safe(b.version)}.${ext}`
 
 // Public, dependency-free install page for sharing a single build (QR codes,
 // links sent to someone without access to the listing).
 function installPage(b: Build) {
   const icon = b.hasIcon ? `<img src="/i/${b.id}/icon.png" alt="">` : `<div class="ph"></div>`
   const notes = b.notes ? `<p class="notes">${xml(b.notes)}</p>` : ""
+  const hint =
+    b.platform === "android"
+      ? `<p class="hint">Android downloads the APK; if asked, allow your browser to install unknown apps.</p>`
+      : ""
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${xml(b.name)} ${xml(b.version)}</title>
@@ -141,13 +171,15 @@ h1{font-size:20px;font-weight:600;margin:16px 0 2px}
 p{margin:0;color:var(--mute);font-size:13px}
 .notes{margin-top:12px;color:var(--fg)}
 a.btn{display:inline-block;margin-top:24px;background:var(--btn);color:var(--btnfg);text-decoration:none;font-weight:500;padding:10px 24px;border-radius:8px}
+.hint{margin-top:12px}
 </style></head><body><main>
 ${icon}
 <h1>${xml(b.name)}</h1>
-<p>${xml(b.version)}${b.build ? ` (${xml(b.build)})` : ""} · ${mb(b.size)}</p>
+<p>${b.platform === "android" ? "Android · " : ""}${xml(b.version)}${b.build ? ` (${xml(b.build)})` : ""} · ${mb(b.size)}</p>
 <p>${xml(b.bundleId)}</p>
 ${notes}
-<a class="btn" href="${installUrl(b.id)}">Install</a>
+<a class="btn" href="${installUrl(b)}">Install</a>
+${hint}
 </main></body></html>`
 }
 
@@ -193,17 +225,27 @@ export const server = Bun.serve({
     },
     "/i/:id/manifest.plist": async (req) => {
       const b = await readBuild(req.params.id)
-      return b
+      return b?.platform === "ios"
         ? new Response(manifestPlist(b), { headers: { "Content-Type": "application/xml" } })
         : notFound()
     },
     "/i/:id/app.ipa": async (req) => {
       const b = await readBuild(req.params.id)
-      if (!b) return notFound()
+      if (b?.platform !== "ios") return notFound()
       return new Response(Bun.file(join(DATA_DIR, b.id, "app.ipa")), {
         headers: {
           "Content-Type": "application/octet-stream",
-          "Content-Disposition": `attachment; filename="${b.name.replace(/[^\w.-]+/g, "_")}-${b.version}.ipa"`,
+          "Content-Disposition": `attachment; filename="${attachmentName(b, "ipa")}"`,
+        },
+      })
+    },
+    "/i/:id/app.apk": async (req) => {
+      const b = await readBuild(req.params.id)
+      if (b?.platform !== "android") return notFound()
+      return new Response(Bun.file(join(DATA_DIR, b.id, "app.apk")), {
+        headers: {
+          "Content-Type": "application/vnd.android.package-archive",
+          "Content-Disposition": `attachment; filename="${attachmentName(b, "apk")}"`,
         },
       })
     },

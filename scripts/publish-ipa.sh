@@ -15,9 +15,8 @@ set -euo pipefail
 
 IPA="${1:?usage: publish-ipa.sh App.ipa [notes]}"
 NOTES="${2:-}"
-IPA_HOST="${IPA_HOST:-n0}"
-IPA_DIR="${IPA_DIR:-/mnt/primary/appdata/ipa}"
-IPA_URL="${IPA_URL:-https://ipa.lt3.co}"
+# shellcheck source=lib/publish-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/publish-common.sh"
 
 WORK="$(mktemp -d -t ipa-publish)"
 trap 'rm -rf "$WORK"' EXIT
@@ -35,6 +34,7 @@ BUILD="$(plist CFBundleVersion)"
 
 mkdir -p "$WORK/build"
 cp "$IPA" "$WORK/build/app.ipa"
+FILES=(app.ipa manifest.json)
 
 # Largest primary icon file in the bundle. Xcode stores these as Apple's CgBI
 # PNG variant; sips re-encodes them as standard PNG.
@@ -47,23 +47,11 @@ if [[ -n "$ICON_BASE" ]]; then
       || rm -f "$WORK/build/icon.png"
   fi
 fi
+[[ -f "$WORK/build/icon.png" ]] && FILES+=(icon.png)
 
-NAME="$NAME" BUNDLE_ID="$BUNDLE_ID" VERSION="$VERSION" BUILD="$BUILD" NOTES="$NOTES" \
-python3 - > "$WORK/build/manifest.json" <<'EOF'
-import datetime, json, os
-m = {k: os.environ[e] for k, e in [("name", "NAME"), ("bundleId", "BUNDLE_ID"),
-     ("version", "VERSION"), ("build", "BUILD"), ("notes", "NOTES")] if os.environ[e]}
-m["uploadedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-print(json.dumps(m, indent=2))
-EOF
-
-# 128-bit random, URL-safe: everything under /i/<id>/ is public.
-ID="$(openssl rand -base64 16 | tr '+/' '-_' | tr -d '=')"
-
-# COPYFILE_DISABLE/--no-mac-metadata keep macOS ._* and xattr records out.
-COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -C "$WORK/build" -cf - app.ipa manifest.json \
-  $([[ -f "$WORK/build/icon.png" ]] && echo icon.png) | ssh "$IPA_HOST" \
-  "set -e; mkdir -p '$IPA_DIR/.$ID' && tar --no-same-owner -C '$IPA_DIR/.$ID' -xf - && mv '$IPA_DIR/.$ID' '$IPA_DIR/$ID'"
+write_manifest "$WORK/build/manifest.json" ios "$NAME" "$BUNDLE_ID" "$VERSION" "$BUILD" "$NOTES"
+ID="$(new_build_id)"
+upload_build "$ID" "$WORK/build" "${FILES[@]}"
 
 echo "$NAME $VERSION ($BUILD) published"
 echo "$IPA_URL/i/$ID"
