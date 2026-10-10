@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Toaster } from "@/components/ui/sonner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type Platform = "ios" | "android"
 
@@ -76,6 +77,24 @@ const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "android", label: "Android" },
 ]
 const platformLabel = (p: Platform) => PLATFORMS.find((x) => x.id === p)!.label
+const isPlatform = (p: string | null): p is Platform =>
+  PLATFORMS.some((x) => x.id === p)
+
+// Tab shown first: the device's own platform when it has one; otherwise the
+// platform with the newest build, decided once the listing has loaded.
+const devicePlatform: Platform | null = isIOS
+  ? "ios"
+  : isAndroid
+    ? "android"
+    : null
+
+const newestPlatform = (apps: AppGroup[]): Platform => {
+  let best: Build | undefined
+  for (const a of apps)
+    for (const b of a.builds)
+      if (!best || b.uploadedAt > best.uploadedAt) best = b
+  return best?.platform ?? "ios"
+}
 
 // Whether this device can install the build straight from the listing; other
 // devices get the QR code to the public install page instead.
@@ -121,10 +140,6 @@ function AppIcon({ build, size }: { build: Build; size: "lg" | "sm" }) {
 type Actions = {
   onQr: (b: Build) => void
   onDelete: (b: Build) => void
-}
-
-function PlatformBadge({ platform }: { platform: Platform }) {
-  return <Badge variant="outline">{platformLabel(platform)}</Badge>
 }
 
 function InstallButton({
@@ -195,7 +210,6 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-base font-medium">{latest.name}</h2>
-              <PlatformBadge platform={latest.platform} />
               <Badge variant="secondary">{label(latest)}</Badge>
             </div>
             <p className="truncate text-xs text-muted-foreground">
@@ -230,10 +244,7 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
                 {older.map((b) => (
                   <li key={b.id} className="flex items-center gap-3 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-2 text-sm font-medium">
-                        {label(b)}
-                        <PlatformBadge platform={b.platform} />
-                      </p>
+                      <p className="text-sm font-medium">{label(b)}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {when(b.uploadedAt)} · {mb(b.size)}
                         {b.notes ? ` · ${b.notes}` : ""}
@@ -253,8 +264,9 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
 }
 
 export function App() {
-  const [title, setTitle] = useState("iOS Apps")
+  const [title, setTitle] = useState("Apps")
   const [apps, setApps] = useState<AppGroup[] | null>(null)
+  const [platform, setPlatform] = useState<Platform | null>(devicePlatform)
   const [error, setError] = useState<string | null>(null)
   const [qr, setQr] = useState<Build | null>(null)
   const [deleting, setDeleting] = useState<Build | null>(null)
@@ -263,7 +275,10 @@ export function App() {
     try {
       const res = await fetch("/api/apps")
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setApps(await res.json())
+      const list: AppGroup[] = await res.json()
+      setApps(list)
+      // Only the first load picks a tab; a later refresh keeps the user's choice.
+      setPlatform((p) => p ?? newestPlatform(list))
       setError(null)
     } catch (e) {
       setError(String(e))
@@ -284,8 +299,6 @@ export function App() {
     return () => window.removeEventListener("focus", onFocus)
   }, [load])
 
-  const mixed = new Set(apps?.map((a) => a.platform)).size > 1
-
   const confirmDelete = async () => {
     if (!deleting) return
     const res = await fetch(`/api/builds/${deleting.id}`, { method: "DELETE" })
@@ -297,37 +310,47 @@ export function App() {
 
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 px-4 py-8 sm:py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      <header className="flex items-center gap-3">
+        <img src="/logo.svg" alt="" className="size-8" />
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      </header>
+      <Tabs
+        value={platform ?? "ios"}
+        onValueChange={(v) => isPlatform(v) && setPlatform(v)}
+      >
+        <TabsList>
+          {PLATFORMS.map(({ id, label: name }) => (
+            <TabsTrigger key={id} value={id} className="px-3">
+              {name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       {error && (
         <p className="text-sm text-destructive">
           Couldn't load builds: {error}
         </p>
       )}
-      {apps?.length === 0 && (
-        <p className="text-sm text-muted-foreground">No builds yet.</p>
-      )}
-      {apps &&
-        PLATFORMS.map(({ id, label: name }) => {
-          const list = apps.filter((a) => a.platform === id)
-          if (list.length === 0) return null
-          return (
-            <section key={id} className="flex flex-col gap-4">
-              {mixed && (
-                <h2 className="text-sm font-medium text-muted-foreground">
-                  {name}
-                </h2>
-              )}
-              {list.map((app) => (
+      {apps && platform && (
+        <section className="flex flex-col gap-4">
+          {apps.filter((a) => a.platform === platform).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No {platformLabel(platform)} builds yet.
+            </p>
+          ) : (
+            apps
+              .filter((a) => a.platform === platform)
+              .map((app) => (
                 <AppCard
                   key={`${app.platform}:${app.bundleId}`}
                   app={app}
                   onQr={setQr}
                   onDelete={setDeleting}
                 />
-              ))}
-            </section>
-          )
-        })}
+              ))
+          )}
+        </section>
+      )}
 
       <Dialog open={qr !== null} onOpenChange={(open) => !open && setQr(null)}>
         <DialogContent className="sm:max-w-sm">

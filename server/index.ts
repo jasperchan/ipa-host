@@ -20,7 +20,7 @@ import { join, resolve } from "node:path"
 
 const DATA_DIR = resolve(process.env.DATA_DIR ?? "./data")
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? "http://localhost:8080").replace(/\/$/, "")
-const TITLE = process.env.APP_TITLE || "iOS Apps"
+const TITLE = process.env.APP_TITLE || "Apps"
 const STATIC_DIR = resolve(process.env.STATIC_DIR ?? join(import.meta.dir, "../web/dist"))
 const PORT = Number(process.env.PORT ?? 8080)
 

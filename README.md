@@ -61,7 +61,7 @@ everything except `/i/`, and don't publish its port on the LAN.
 | Env | Default |
 | --- | --- |
 | `PUBLIC_URL` | `http://localhost:8080` (used in install manifests) |
-| `APP_TITLE` | `iOS Apps` (set to e.g. `Apps` when hosting both platforms) |
+| `APP_TITLE` | `Apps` |
 | `DATA_DIR` | `/data` in the image |
 | `PORT` | `8080` |
 
