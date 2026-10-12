@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3F8CFF"/>
-      <stop offset="1" stop-color="#1F5EEB"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="128" fill="url(#tile)"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="60" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M152 388L256 132l104 256"/>
-    <path d="M198 304h116"/>
+  <!-- Teal app tile, dark outline, inset dashed line, and an "A" of three outlined white sticks. -->
+  <rect x="14" y="14" width="484" height="484" rx="112" fill="#13A89E" stroke="#2E3A39" stroke-width="22"/>
+  <rect x="56" y="56" width="400" height="400" rx="70" fill="none" stroke="#2E3A39" stroke-width="11" stroke-linecap="round" stroke-dasharray="124 30" stroke-dashoffset="124"/>
+  <g fill="none">
+    <path d="M166 380L284 120" stroke="#2E3A39" stroke-width="70" stroke-linecap="round"/>
+    <path d="M166 380L284 120" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+    <path d="M346 380L228 120" stroke="#2E3A39" stroke-width="70" stroke-linecap="round"/>
+    <path d="M346 380L228 120" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+    <path d="M182 300L330 300" stroke="#2E3A39" stroke-width="70" stroke-linecap="round"/>
+    <path d="M182 300L330 300" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
   </g>
 </svg>
