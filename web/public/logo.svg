@@ -1,9 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- App tile with a download arrow: accent tile, white mark, transparent background. -->
-  <rect x="32" y="32" width="448" height="448" rx="112" fill="#3B6CF6"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 140v172"/>
-    <path d="M180 240l76 76 76-76"/>
-    <path d="M160 380h192"/>
+  <!-- App tile in the App Store family: blue squircle, a white "A" drawn as three rounded strokes. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3F8CFF"/>
+      <stop offset="1" stop-color="#1F5EEB"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#tile)"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M166 374L256 150l90 224"/>
+    <path d="M206 300h100"/>
   </g>
 </svg>

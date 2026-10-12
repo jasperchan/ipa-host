@@ -200,26 +200,34 @@ function BuildMenu({ build, onQr, onDelete }: { build: Build } & Actions) {
   )
 }
 
+// Phone: icon and text on top, the actions on a row of their own underneath
+// (Install stretches to the width of a thumb). From `sm` up the actions sit to
+// the right of the text. The version pill always has the title's full width
+// to itself (it wraps under the name rather than squeezing it).
 function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
   const [latest, ...older] = app.builds
   return (
     <Card>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <AppIcon build={latest} size="lg" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-base font-medium">{latest.name}</h2>
-              <Badge variant="secondary">{label(latest)}</Badge>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <AppIcon build={latest} size="lg" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="min-w-0 text-base leading-tight font-medium">
+                  {latest.name}
+                </h2>
+                <Badge variant="secondary">{label(latest)}</Badge>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {app.bundleId}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {when(latest.uploadedAt)} · {mb(latest.size)}
+              </p>
             </div>
-            <p className="truncate text-xs text-muted-foreground">
-              {app.bundleId}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {when(latest.uploadedAt)} · {mb(latest.size)}
-            </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 [&>a,&>button:first-child]:flex-1 sm:[&>a,&>button:first-child]:flex-none">
             <InstallButton build={latest} onQr={actions.onQr} />
             <BuildMenu build={latest} {...actions} />
           </div>
@@ -245,7 +253,7 @@ function AppCard({ app, ...actions }: { app: AppGroup } & Actions) {
                   <li key={b.id} className="flex items-center gap-3 py-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{label(b)}</p>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {when(b.uploadedAt)} · {mb(b.size)}
                         {b.notes ? ` · ${b.notes}` : ""}
                       </p>

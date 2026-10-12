@@ -1,8 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="128" fill="#3B6CF6"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 124v176"/>
-    <path d="M168 220l88 88 88-88"/>
-    <path d="M148 392h216"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3F8CFF"/>
+      <stop offset="1" stop-color="#1F5EEB"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#tile)"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="60" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M152 388L256 132l104 256"/>
+    <path d="M198 304h116"/>
   </g>
 </svg>
