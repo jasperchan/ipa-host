@@ -45,6 +45,9 @@ import {
 import { Toaster } from "@/components/ui/sonner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+// Bundled by Vite under a content hash, so a new mark is never served from a cache of the old one.
+import logo from "./assets/logo.svg"
+
 type Platform = "ios" | "android"
 
 type Build = {
@@ -319,7 +322,7 @@ export function App() {
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 px-4 py-8 sm:py-12">
       <header className="flex items-center gap-3">
-        <img src="/logo.svg" alt="" className="size-8" />
+        <img src={logo} alt="" className="size-8" />
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       </header>
       <Tabs
